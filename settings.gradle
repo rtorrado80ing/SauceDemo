@@ -1,0 +1,6 @@
+// settings.gradle
+
+// Nombre del proyecto raíz (como aparece en IDEs y en los reportes de Gradle/Serenity)
+rootProject.name = "WebAvantage"
+
+

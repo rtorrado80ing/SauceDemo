@@ -1,0 +1,134 @@
+/*
+ ==============================================================================
+  Proyecto: Demo con Serenity BDD + Screenplay + Cucumber (JUnit4)
+
+  Cambios:
+    - Se externalizaron versiones y configuraciones a gradle.properties.
+    - El build.gradle ahora es más limpio, solo referencia variables.
+
+  Comandos útiles:
+    ./gradlew clean test
+    ./gradlew test -Dcucumber.filter.tags="@smoke"
+    ./gradlew test -Dcucumber.options="--plugin pretty"
+    ./gradlew test -Denvironment=dev
+
+  Ubicaciones de reportes:
+    - Serenity (HTML):  target/site/serenity/index.html
+    - JSON resumen:     target/site/serenity/serenity-summary.json
+ ==============================================================================
+*/
+
+/* ---------------------------------------------------------------------------
+   1) buildscript: debe ir ANTES de cualquier bloque 'plugins { }'
+      Aquí añadimos el jar 'serenity-single-page-report' al classpath del build.
+--------------------------------------------------------------------------- */
+buildscript {
+    repositories {
+        mavenCentral()                                  // Repositorio central de Maven (dependencias públicas)
+        maven { url "https://plugins.gradle.org/m2/" }  // Portal de plugins de Gradle
+    }
+    dependencies {
+        // Reporte single-page de Serenity (versión tomada de gradle.properties)
+        classpath "net.serenity-bdd:serenity-single-page-report:${serenityVersion}" // Agrega el generador de reporte "single-page"
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   2) Plugins
+--------------------------------------------------------------------------- */
+plugins {
+    id 'java'                                                               // Habilita el soporte para proyectos Java
+    id 'net.serenity-bdd.serenity-gradle-plugin' version "${serenityVersion}" // Plugin oficial de Serenity para tareas (aggregate, reports, etc.)
+}
+
+/* ---------------------------------------------------------------------------
+   3) Metadatos del proyecto
+--------------------------------------------------------------------------- */
+group = 'com.saucedemo'   // Grupo/base de paquetes del proyecto
+version = '1.0-SNAPSHOT'  // Versión del artefacto (no afecta a las pruebas)
+
+/* ---------------------------------------------------------------------------
+   4) Repositorios de dependencias
+--------------------------------------------------------------------------- */
+repositories {
+    mavenCentral() // Fuente de todas las dependencias declaradas abajo
+}
+
+/* ---------------------------------------------------------------------------
+   5) Dependencias de prueba
+   Mantén TODAS las dependencias de Serenity en la MISMA versión.
+--------------------------------------------------------------------------- */
+dependencies {
+    // =======================
+    // Serenity + Screenplay + WebDriver + Cucumber
+    // =======================
+
+    testImplementation "net.serenity-bdd:serenity-core:${serenityVersion}"               // Núcleo de Serenity: orquesta ejecución, evidencias y reportes
+    testImplementation "net.serenity-bdd:serenity-screenplay:${serenityVersion}"         // Implementa el patrón Screenplay (Actor, Task, Interaction, Question)
+    testImplementation "net.serenity-bdd:serenity-screenplay-webdriver:${serenityVersion}" // Extensiones Screenplay para UI: Click, Enter, Targets, WaitUntil, etc.
+    testImplementation "net.serenity-bdd:serenity-cucumber:${serenityVersion}"           // Integra Cucumber con Serenity (runner CucumberWithSerenity y reportes Gherkin)
+
+    // =======================
+    // Selenium 4 (WebDriver)
+    // =======================
+    testImplementation "org.seleniumhq.selenium:selenium-java:${seleniumVersion}"        // Cliente oficial Selenium: controla navegadores (Chrome/Firefox/Edge)
+
+    // =======================
+    // REST (importante)
+    // =======================
+    testImplementation "net.serenity-bdd:serenity-rest-assured:${serenityVersion}"       // Bridge Serenity ↔ Rest-Assured: reporta requests/responses en el informe
+    testImplementation "net.serenity-bdd:serenity-screenplay-rest:${serenityVersion}"    // Acciones REST en Screenplay (Get, Post, Put, Delete) con actores
+
+    // =======================
+    // Rest-Assured + matchers + JUnit4
+    // =======================
+    testImplementation "io.rest-assured:rest-assured:${restAssuredVersion}"              // DSL para pruebas de APIs (given/when/then) y validaciones HTTP
+    testImplementation "org.hamcrest:hamcrest:${hamcrestVersion}"                        // Matchers legibles: is(), equalTo(), containsString(), etc.
+
+    // =======================
+    // Cucumber + JUnit4
+    // =======================
+    // Runner correcto: @RunWith(CucumberWithSerenity.class) + JUnit4 base
+    testImplementation "io.cucumber:cucumber-java:${cucumberJavaVersion}"                // API de Cucumber para Step Definitions (@Given, @When, @Then)
+    testImplementation "junit:junit:${junitVersion}"                                     // JUnit4: necesario para @RunWith(CucumberWithSerenity.class)
+
+    // =======================
+    // Assertions y logging
+    // =======================
+    testImplementation "org.assertj:assertj-core:${assertjVersion}"                      // Assertions fluidas y expresivas (assertThat(lista).contains(...)…)
+    testImplementation "org.slf4j:slf4j-simple:${slf4jVersion}"                          // Binding simple de SLF4J: logs en consola, sin configuraciones extra
+}
+
+/* ---------------------------------------------------------------------------
+   6) Configuración de la tarea 'test' (JUnit4)
+--------------------------------------------------------------------------- */
+test {
+    useJUnit()                           // Ejecuta con JUnit4 (requerido por CucumberWithSerenity)
+    systemProperties System.getProperties() // Propaga -Dpropiedades (tags, environment) al proceso de test
+    testLogging.showStandardStreams = true // Muestra stdout/stderr en consola (útil en CI)
+    systemProperty "file.encoding", "UTF-8" // Fuerza codificación UTF-8 (evita caracteres raros)
+    description = "Ejecución de pruebas con Serenity + Cucumber (JUnit4) y generación de evidencia."
+}
+
+/* ---------------------------------------------------------------------------
+   7) Continuar el build aunque una task falle (útil para recolectar reportes)
+--------------------------------------------------------------------------- */
+gradle.startParameter.continueOnFailure = true // Si falla un test, sigue para poder generar reportes igualmente
+
+/* ---------------------------------------------------------------------------
+   8) Configuración de reportes de Serenity
+   - 'single-page-html' -> genera index.html
+   - 'json-summary'     -> genera serenity-summary.json
+--------------------------------------------------------------------------- */
+serenity {
+    reports = ['single-page-html', 'json-summary'] // Tipos de reporte a generar al final de la ejecución
+}
+
+/* ---------------------------------------------------------------------------
+   9) Encadenamiento de tareas:
+      Al terminar 'test', ejecutar 'aggregate' y luego 'reports' para producir
+      el HTML single-page en target/site/serenity/index.html
+--------------------------------------------------------------------------- */
+tasks.named('test') {
+    finalizedBy 'aggregate', 'reports' // Después de test → corre aggregate (procesa JSON) y reports (genera HTML)
+}
